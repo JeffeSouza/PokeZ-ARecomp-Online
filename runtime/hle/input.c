@@ -222,7 +222,7 @@ static void recompute_keyboard(void) {
     bool focus_down = held_key(g_bind_key[BIND_ZL]);
     // Change Moves: ZL / ZR switch its tabs (Available Moves / Available TMs), so there the ZL key is plain ZL, held while
     // held - the focus latch would hold ZL down from one press to the next and the tabs never see a press.
-    bool moves_page = scene==ZA_MOVES_STATE;
+    bool moves_page = scene==0xb8a5d7646147b713ull;  // (ZA_MOVES_STATE, defined further down)
     if (scene!=ZA_BIGMAP_STATE && !moves_page && focus_down && !key_focus_was_down){
         key_focus_toggled = !key_focus_toggled;key_focus_acquired=false;
         key_focus_started=key_focus_toggled?SDL_GetTicksNS():0;
