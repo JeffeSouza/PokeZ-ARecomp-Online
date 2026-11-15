@@ -258,7 +258,7 @@ bool bind_settings_load(const char *key, const char *val) {
     }
     if (!strncmp(key, "bind_mouse_", 11)) {  // bind_mouse_left = zr / none
         for (int m = 0; m < MOUSEB_COUNT; m++)
-            if (!strcmp(key + 11, k_mouse_ini[m])) g_bind_mouse[m] = (int16_t)(!strcmp(val, "aim") ? BIND_MOUSE_AIM : !strcmp(val, "party_toggle") ? BIND_MOUSE_PARTY_TOGGLE : strcmp(val, "none") ? bind_slot_from_name(val) : -1);
+            if (!strcmp(key + 11, k_mouse_ini[m])) g_bind_mouse[m] = (int16_t)(!strcmp(val, "aim") ? BIND_MOUSE_AIM : !strcmp(val, "aim_throw") ? BIND_MOUSE_AIM_THROW : !strcmp(val, "party_toggle") ? BIND_MOUSE_PARTY_TOGGLE : strcmp(val, "none") ? bind_slot_from_name(val) : -1);
         for (int m = 0; m < MOUSEB_COUNT; m++)
             if (g_bind_mouse[m] >= BIND_PAD_COUNT) g_bind_mouse[m] = -1;  // (buttons only: not a stick direction)
         return true;
@@ -295,7 +295,7 @@ void bind_settings_save(FILE *f) {
         }
     for (int m = 0; m < MOUSEB_COUNT; m++)
         if (g_bind_mouse[m] != k_def_mouse[m])
-            fprintf(f, "bind_mouse_%s = %s\n", k_mouse_ini[m], g_bind_mouse[m] == BIND_MOUSE_AIM ? "aim" : g_bind_mouse[m] == BIND_MOUSE_PARTY_TOGGLE ? "party_toggle" : g_bind_mouse[m] >= 0 ? k_ini[g_bind_mouse[m]] : "none");
+            fprintf(f, "bind_mouse_%s = %s\n", k_mouse_ini[m], g_bind_mouse[m] == BIND_MOUSE_AIM ? "aim" : g_bind_mouse[m] == BIND_MOUSE_AIM_THROW ? "aim_throw" : g_bind_mouse[m] == BIND_MOUSE_PARTY_TOGGLE ? "party_toggle" : g_bind_mouse[m] >= 0 ? k_ini[g_bind_mouse[m]] : "none");
 }
 
 // A token chooses one of the complete, already loaded key glyphs. Bindings
@@ -322,6 +322,8 @@ int bind_prompt_keyboard_token(int slot,int context){
     if(slot==BIND_ZR&&context!=3)mouse_action=BIND_MOUSE_AIM;
     if(g_settings.mouse_camera==MOUSE_CAM_CAPTURED){
         for(int i=0;i<MOUSEB_COUNT;i++)if(g_bind_mouse[i]==mouse_action)return ZA_MOUSE_TOKEN_BASE+i;
+        // (ZR as aim, or while aiming as the throw: a release-to-throw button does both)
+        if(slot==BIND_ZR)for(int i=0;i<MOUSEB_COUNT;i++)if(g_bind_mouse[i]==BIND_MOUSE_AIM_THROW)return ZA_MOUSE_TOKEN_BASE+i;
     }
     return g_bind_key[slot]>0&&g_bind_key[slot]<512?g_bind_key[slot]:0;
 }

@@ -33,7 +33,9 @@ extern int16_t g_bind_pad[BIND_PAD_COUNT];  // PADB value per Switch button
 extern int16_t g_bind_key[BIND_KEY_COUNT];  // SDL_Scancode per input (0 = none)
 // Mouse buttons -> Switch button (BIND_A..BIND_DOWN, -1 none): the other way round from the tables above, so a mouse
 // button adds to the keyboard's key instead of taking its place. Only while the mouse camera holds the cursor.
-enum { BIND_MOUSE_AIM = -2, BIND_MOUSE_PARTY_TOGGLE = -3 }; // hold to aim; release cancels, left click throws
+// BIND_MOUSE_AIM_THROW: hold to aim, release to throw - one button for the whole throw, for layouts where no mouse
+// button presses ZR (BIND_MOUSE_AIM alone cancels on release and throws only with a ZR click).
+enum { BIND_MOUSE_AIM = -2, BIND_MOUSE_PARTY_TOGGLE = -3, BIND_MOUSE_AIM_THROW = -5 }; // hold to aim; release cancels, left click throws
 enum { MOUSEB_LEFT, MOUSEB_RIGHT, MOUSEB_MIDDLE, MOUSEB_X1, MOUSEB_X2, MOUSEB_COUNT };
 extern int16_t g_bind_mouse[MOUSEB_COUNT];
 const char *bind_mouse_name(int mb);           // "Left button"

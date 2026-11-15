@@ -2293,25 +2293,48 @@ enum { AIM_IDLE, AIM_HELD, AIM_THROW, AIM_CANCEL_CLEAR, AIM_CANCEL };
 static int aim_stage, aim_wheel_steps, wheel_context;
 static bool aim_blocked_until_release, aim_suppress_throw_until_release;
 static bool aim_wheel_pressed;
+// The held aim came from a "Aim, release to throw" button (BIND_MOUSE_AIM_THROW): its release throws instead of
+// cancelling - only a real release with the mouse still held for the game (a capture change or a controller cancels).
+static bool aim_release_throws;
+// Mouse buttons pressed while aiming that throw (any button but an aim one: hold left to aim, click right to throw,
+// whatever right is bound to). Their own binding is held back until they are released, so a focus / ZL right button
+// does not also lock on mid-throw. aim_prev_down: last mouse_down, for the press edge (a button already down when aiming
+// starts does not throw).
+static unsigned aim_click_btns, aim_prev_down;
 static uint64_t aim_since, aim_wheel_frame = UINT64_MAX, aim_wheel_pulse;
 static void recompute_mouse_locked(void) {
     extern uint64_t renderer_present_count(void);
     uint64_t frame = renderer_present_count();
-    bool aim = false;
-    for (int m = 0; m < MOUSEB_COUNT; m++)
+    bool aim = false, aim_throw = false;
+    for (int m = 0; m < MOUSEB_COUNT; m++) {
         if (g_bind_mouse[m] == BIND_MOUSE_AIM && mouse_down[m]) aim = true;
+        if (g_bind_mouse[m] == BIND_MOUSE_AIM_THROW && mouse_down[m]) aim = aim_throw = true;
+    }
     if (!aim) aim_blocked_until_release = false;
     if (aim_blocked_until_release) aim = false;
     bool left_throw = mouse_down[MOUSEB_LEFT] && g_bind_mouse[MOUSEB_LEFT] == BIND_ZR;
     if (!left_throw) aim_suppress_throw_until_release = false;
-    bool click = left_throw && !aim_suppress_throw_until_release;
+    unsigned down_mask = 0;
+    for (int m = 0; m < MOUSEB_COUNT; m++) if (mouse_down[m]) down_mask |= 1u << m;
+    aim_click_btns &= down_mask;
+    if (aim && (aim_stage == AIM_HELD || aim_stage == AIM_THROW))
+        for (int m = 0; m < MOUSEB_COUNT; m++)
+            if ((down_mask & ~aim_prev_down) >> m & 1 && g_bind_mouse[m] != BIND_MOUSE_AIM && g_bind_mouse[m] != BIND_MOUSE_AIM_THROW &&
+                !(m == MOUSEB_LEFT && g_bind_mouse[m] == BIND_ZR)) aim_click_btns |= 1u << m;
+    aim_prev_down = down_mask;
+    bool click = (left_throw && !aim_suppress_throw_until_release) || aim_click_btns;
     if(aim||(aim_stage==AIM_IDLE&&click))atomic_store(&mouse_ball_ui_cancelled,false);
     if (aim_stage == AIM_IDLE && aim) {
         aim_stage = AIM_HELD;
         atomic_store(&mouse_throw_cancel_until, 0);
     }
+    if (aim_stage == AIM_HELD && aim) aim_release_throws = aim_throw;
     if (aim_stage == AIM_HELD && click) { aim_stage = AIM_THROW; aim_since = frame; }
-    else if (aim_stage == AIM_HELD && !aim) {
+    else if (aim_stage == AIM_HELD && !aim && aim_release_throws && mouse_held && !pad) {
+        // Released: ZR goes up (the game throws); the throw stage below then sends the cancel edge that ends aiming,
+        // exactly as releasing the aim button right after a ZR click does.
+        aim_stage = AIM_THROW; aim_since = frame; aim_release_throws = false;
+    } else if (aim_stage == AIM_HELD && !aim) {
         aim_stage = AIM_CANCEL_CLEAR; aim_since = frame;
         atomic_store(&mouse_ball_ui_cancelled,true);
         atomic_store(&mouse_aim_return_until, SDL_GetTicksNS() + MOUSE_AIM_RETURN_NS);
@@ -2336,6 +2359,7 @@ static void recompute_mouse_locked(void) {
         aim_stage = aim ? AIM_HELD : AIM_IDLE;
     uint64_t b = 0;
     for (int m = 0; m < MOUSEB_COUNT; m++) {
+        if (aim_click_btns >> m & 1) continue;  // (a throw click: its own binding waits for its release)
         if (mouse_down[m] && g_bind_mouse[m] == BIND_MOUSE_PARTY_TOGGLE) {
             b |= 1ull << party_mouse_button;
             continue;
@@ -3278,7 +3302,7 @@ RT_ON_RESET(input_reboot_reset) {
     atomic_store(&key_normal_actions, 0); atomic_store(&key_normal_unseen, 0); atomic_store(&key_normal_taps, 0);
     atomic_store(&cancel_edge_start, 0);
     pthread_mutex_lock(&mouse_buttons_lock);
-    aim_stage = AIM_IDLE; aim_since = 0; aim_blocked_until_release = false; aim_suppress_throw_until_release = false; wheel_context = 0; aim_wheel_steps = 0; aim_wheel_pulse = 0;
+    aim_stage = AIM_IDLE; aim_since = 0; aim_blocked_until_release = false; aim_suppress_throw_until_release = false; aim_release_throws = false; aim_click_btns = aim_prev_down = 0; wheel_context = 0; aim_wheel_steps = 0; aim_wheel_pulse = 0;
     atomic_store(&mouse_throw_cancel_until, 0); atomic_store(&mouse_throw_cancel_after, 0);
     atomic_store(&mouse_ball_ui_cancelled,false);
     aim_wheel_pressed = false; aim_wheel_frame = UINT64_MAX; mouse_buttons = 0; mouse_cancel_clear = false; mouse_aim_active = false;
