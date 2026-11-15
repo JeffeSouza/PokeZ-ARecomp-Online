@@ -130,6 +130,8 @@ void input_native_moves_flush(Cpu *c) {
             pthread_mutex_lock(&za_list_lock);
             if(za_list.owner==b.owner&&za_list.pinned){za_list.selected=absolute;za_list.recover=false;atomic_store(&za_list_guard_selected,za_list.selected);}
             pthread_mutex_unlock(&za_list_lock);
+            if(!click&&getenv("LARECOMP_MOUSE_UI_LOG"))fprintf(stderr,"[moves-page-hover] f=%llu row=%u top=%u
+",(unsigned long long)frame,a.index,top);
             mouse_moves_call(c,0x7000fc2630ull,b.owner,absolute-top,top);
         }
     }

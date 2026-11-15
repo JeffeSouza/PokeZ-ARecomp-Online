@@ -694,13 +694,27 @@ static _Atomic int za_list_guard_selected, za_list_guard_cols;
 extern uint64_t input_buttons_now(void);
 extern uint64_t renderer_present_count(void);
 
+static bool za_list_nav_input(void);
 void rt_za_list_select(Cpu *c) {
     if (!atomic_load(&za_list_guard) || c->x[0] != atomic_load(&za_list_guard_owner) ||
         atomic_load(&za_list_guard_epoch) != atomic_load(&mouse_list_scene_epoch) ||
         atomic_load(&za_list_guard_scene) != za_menu_state()) return;
+    // A held direction (keys, stick, pad) is the player moving the selection: let it through and drop the guard, which
+    // only keeps the selection still while a wheel scroll animates (it pulled Change Moves back to the pinned entry).
+    if (za_list_nav_input()) {
+        atomic_store(&za_list_guard, false);
+        if (getenv("LARECOMP_MOUSE_UI_LOG")) fprintf(stderr, "[list-guard] released by navigation f=%llu
+", (unsigned long long)renderer_present_count());
+        return;
+    }
     int cols = atomic_load(&za_list_guard_cols), top = (int)(uint32_t)c->x[2];
-    if (cols > 0 && cols <= 20 && top >= 0 && top <= 10000)
+    if (cols > 0 && cols <= 20 && top >= 0 && top <= 10000) {
+        if (getenv("LARECOMP_MOUSE_UI_LOG") && c->x[1] != (uint32_t)(atomic_load(&za_list_guard_selected) - top * cols))
+            fprintf(stderr, "[list-guard] selection %u -> %d (top %d) f=%llu
+", (unsigned)c->x[1],
+                    atomic_load(&za_list_guard_selected) - top * cols, top, (unsigned long long)renderer_present_count());
         c->x[1] = (uint32_t)(atomic_load(&za_list_guard_selected) - top * cols);
+    }
 }
 
 static void za_list_tick_locked(Cpu *c) {
@@ -951,9 +965,7 @@ static void za_list_tick_locked(Cpu *c) {
             s->selected = (int)absolute; s->target = (int)top; s->pinned = true;
         } else return;
     }
-    if ((input_buttons_now() & ((1ull << BTN_UP) | (1ull << BTN_DOWN) | (1ull << BTN_LEFT) | (1ull << BTN_RIGHT))) ||
-        abs(atomic_load(&key_lx)) > 16000 || abs(atomic_load(&pad_lx)) > 16000 || abs(atomic_load(&pad_ly)) > 16000 ||
-        atomic_load(&mouse_menu_running)) s->recover = true;
+    if (za_list_nav_input() || atomic_load(&mouse_menu_running)) s->recover = true;
     if (LD32(sc + 0x178)) {
         Cpu saved = *c; c->x[0] = o; guest_call(c, 0x7000fc7e00ull); *c = saved;
     }
@@ -968,6 +980,10 @@ static void za_list_tick_locked(Cpu *c) {
         }
         s->pinned = s->recover = false;
     }
+}
+static bool za_list_nav_input(void) {
+    return (input_buttons_now() & ((1ull << BTN_UP) | (1ull << BTN_DOWN) | (1ull << BTN_LEFT) | (1ull << BTN_RIGHT))) ||
+        abs(atomic_load(&key_lx)) > 16000 || abs(atomic_load(&pad_lx)) > 16000 || abs(atomic_load(&pad_ly)) > 16000;
 }
 void rt_za_list_tick(Cpu *c) {
     if (za_list_busy) return;
