@@ -961,6 +961,9 @@ static void za_list_tick_locked(Cpu *c) {
         // Recognize an off-screen selection left by a previous scroll.
         if ((row < 0 || row >= (int)(cols * rows)) && absolute >= 0 && absolute < count) {
             s->selected = (int)absolute; s->target = (int)top; s->pinned = true;
+            if (getenv("LARECOMP_MOUSE_UI_LOG"))
+                fprintf(stderr, "[list-pin] scene=%llx row=%d top=%u count=%u f=%llu\n", (unsigned long long)scene, row, top, count,
+                        (unsigned long long)frame);
         } else return;
     }
     if (za_list_nav_input() || atomic_load(&mouse_menu_running)) s->recover = true;
@@ -970,7 +973,12 @@ static void za_list_tick_locked(Cpu *c) {
     if (!LD32(sc + 0x178)) { s->animating = false; atomic_store(&za_list_guard, false); }
     if (s->recover && !s->animating) {
         top = LD32(sel + 16); int row = (int32_t)LD32(sel + 20);
-        if (row < 0 || row >= (int)(cols * rows)) {
+        if (getenv("LARECOMP_MOUSE_UI_LOG"))
+            fprintf(stderr, "[list-recover] scene=%llx row=%d top=%u selected=%d f=%llu\n", (unsigned long long)scene, row, top,
+                    s->selected, (unsigned long long)frame);
+        // (not Change Moves: its page controller owns the selection, and this pulled every arrow press back to the first
+        // move - the list's own row reads out of range there)
+        if ((row < 0 || row >= (int)(cols * rows)) && scene != ZA_MOVES_STATE) {
             unsigned visible = row < 0 ? 0 : cols * rows - 1;
             if (top * cols + visible >= count) visible = count - 1 - top * cols;
             Cpu saved = *c; c->x[0] = o; c->x[1] = visible; c->x[2] = top;
@@ -1069,8 +1077,7 @@ void input_native_layout_tick(uint64_t layout) {
     bool keyboard=input_prompt_auto()==PROMPTS_KEYBOARD;
     za_battle_hud_tick(layout,keyboard);
     za_battle_keys_publish(layout,keyboard);
-    if(keyboard&&za_menu_state()==ZA_MOVES_STATE&&za_ui_layout_pane(layout,"L_skill_list_00")&&za_ui_layout_pane(layout,"L_switchitem_01"))
-        za_ball_ui_hide(layout,"L_switch_00");
+    // (Change Moves' L_switch_00 - the ZL / ZR tab icons - stays shown on keyboard: those keys switch its tabs now)
     za_ball_ui_tick(layout,mouse_ball_ui_closing());
 }
 void input_native_layout_destroy(uint64_t layout){za_ball_ui_forget(layout);za_battle_hud_forget(layout);}
