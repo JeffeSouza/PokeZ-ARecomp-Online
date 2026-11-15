@@ -19,6 +19,8 @@ Hover over main-menu options, party members, Satchel entries, Pokédex grid entr
 | Throw Poké Ball | Left mouse button (while aiming or on its own) |
 | Cycle Poké Ball types | Scroll wheel while aiming |
 | Cancel aiming | Release right mouse button |
+| Throw while aiming with another button | While holding the aim button, click any other mouse button |
+| Aim and throw with one button (optional) | Assign **Aim, release to throw** to a mouse button in Settings > Controls > Mouse: hold to aim, release to throw |
 | Game menu | Esc from the overworld |
 | Satchel | I from the overworld |
 | Change Satchel tab | A / D while in the Satchel |

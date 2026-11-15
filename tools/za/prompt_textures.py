@@ -433,6 +433,9 @@ def label(style, button, context='field'):
         if mouse_camera=='captured':
             for mouse,assigned in mouse_binds.items():
                 if assigned==action:return MOUSE_LABEL[mouse]
+            if slot=='zr':  # (aim / throw: a release-to-throw button does both)
+                for mouse,assigned in mouse_binds.items():
+                    if assigned=='aim_throw':return MOUSE_LABEL[mouse]
         return key(slot)
     if button not in pad_binds: return None  # (the sticks' own icons)
     host = pad_binds[button]
