@@ -215,13 +215,17 @@ static void recompute_keyboard(void) {
     for (int i = 0; i < BIND_PAD_COUNT; i++)
         if (held_key(g_bind_key[i])) b |= 1ull << i;
     bool focus_down = held_key(g_bind_key[BIND_ZL]);
-    if (scene!=ZA_BIGMAP_STATE && focus_down && !key_focus_was_down){
+    // Change Moves: ZL / ZR switch its tabs (Available Moves / Available TMs), so there the ZL key is plain ZL, held while
+    // held - the focus latch would hold ZL down from one press to the next and the tabs never see a press.
+    bool moves_page = scene==ZA_MOVES_STATE;
+    if (scene!=ZA_BIGMAP_STATE && !moves_page && focus_down && !key_focus_was_down){
         key_focus_toggled = !key_focus_toggled;key_focus_acquired=false;
         key_focus_started=key_focus_toggled?SDL_GetTicksNS():0;
         key_focus_started_frame=key_focus_toggled?renderer_present_count():0;
     }
     key_focus_was_down = focus_down;
-    if (key_focus_toggled) b |= 1ull << BTN_ZL;
+    if (moves_page) { if (focus_down) b |= 1ull << BTN_ZL; else b &= ~(1ull << BTN_ZL); }
+    else if (key_focus_toggled) b |= 1ull << BTN_ZL;
     else b &= ~(1ull << BTN_ZL);
     // These face buttons have ordinary actions as well as focused moves.
     // Sprint is handled separately because it must not cancel ball aiming.
@@ -2553,23 +2557,6 @@ void input_handle_event(const SDL_Event *e) {
             if(e->key.scancode<SDL_SCANCODE_COUNT){keys_down[e->key.scancode]=false;recompute_keyboard();}
             if(e->type==SDL_EVENT_KEY_DOWN&&!e->key.repeat){move_back_key_down=true;mouse_tab_cancel();direct_list_cancel();za_mouse_ui_cancel();mouse_moves_back();}
             if(e->type==SDL_EVENT_KEY_UP)move_back_key_down=false;
-            return;
-        }
-        // Change Moves: the ZL / ZR keys switch its two tabs (Available Moves / Available TMs) through the same native tab
-        // call as a tab click (rt_za_tab_nav). As plain buttons they do not: the keyboard ZL is the focus latch (a press
-        // toggles a held ZL, so the tab presenter never sees a press), and the screen's list took the keys instead. The
-        // keys stay out of keys_down here, so neither the latch nor the list sees them.
-        if((e->key.scancode==g_bind_key[BIND_ZL]||e->key.scancode==g_bind_key[BIND_ZR])&&e->key.scancode>0&&
-            za_menu_state()==ZA_MOVES_STATE&&!menu_input_captured()&&!lumiose_scroll_menu_open()&&
-            atomic_load(&mouse_menu_modal_scene)!=ZA_MOVES_STATE){
-            if(e->type==SDL_EVENT_KEY_DOWN&&!e->key.repeat){
-                unsigned info=atomic_load(&mouse_tab_info),count=info>>8,current=info&255;
-                if(atomic_load(&mouse_tab_scene)==ZA_MOVES_STATE&&count&&count<=16&&current<count){
-                    bool right=e->key.scancode==g_bind_key[BIND_ZR];
-                    mouse_moves_cancel();direct_list_cancel();za_mouse_ui_cancel();mouse_tab_cancel();
-                    atomic_store(&mouse_tab_request,(int)((current+(right?1:count-1))%count)+1);
-                }
-            }
             return;
         }
         if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {
