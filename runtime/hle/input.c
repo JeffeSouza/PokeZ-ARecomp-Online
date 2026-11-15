@@ -688,15 +688,13 @@ void rt_za_list_select(Cpu *c) {
     // only keeps the selection still while a wheel scroll animates (it pulled Change Moves back to the pinned entry).
     if (za_list_nav_input()) {
         atomic_store(&za_list_guard, false);
-        if (getenv("LARECOMP_MOUSE_UI_LOG")) fprintf(stderr, "[list-guard] released by navigation f=%llu
-", (unsigned long long)renderer_present_count());
+        if (getenv("LARECOMP_MOUSE_UI_LOG")) fprintf(stderr, "[list-guard] released by navigation f=%llu\n", (unsigned long long)renderer_present_count());
         return;
     }
     int cols = atomic_load(&za_list_guard_cols), top = (int)(uint32_t)c->x[2];
     if (cols > 0 && cols <= 20 && top >= 0 && top <= 10000) {
         if (getenv("LARECOMP_MOUSE_UI_LOG") && c->x[1] != (uint32_t)(atomic_load(&za_list_guard_selected) - top * cols))
-            fprintf(stderr, "[list-guard] selection %u -> %d (top %d) f=%llu
-", (unsigned)c->x[1],
+            fprintf(stderr, "[list-guard] selection %u -> %d (top %d) f=%llu\n", (unsigned)c->x[1],
                     atomic_load(&za_list_guard_selected) - top * cols, top, (unsigned long long)renderer_present_count());
         c->x[1] = (uint32_t)(atomic_load(&za_list_guard_selected) - top * cols);
     }
