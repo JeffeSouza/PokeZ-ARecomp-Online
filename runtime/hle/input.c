@@ -2576,6 +2576,23 @@ void input_handle_event(const SDL_Event *e) {
             if(e->type==SDL_EVENT_KEY_UP)move_back_key_down=false;
             return;
         }
+        // Change Moves: the ZL / ZR keys switch its two tabs (Available Moves / Available TMs) through the same native tab
+        // call as a tab click (rt_za_tab_nav). As plain buttons they do not: the keyboard ZL is the focus latch (a press
+        // toggles a held ZL, so the tab presenter never sees a press), and the screen's list took the keys instead. The
+        // keys stay out of keys_down here, so neither the latch nor the list sees them.
+        if((e->key.scancode==g_bind_key[BIND_ZL]||e->key.scancode==g_bind_key[BIND_ZR])&&e->key.scancode>0&&
+            za_menu_state()==ZA_MOVES_STATE&&!menu_input_captured()&&!lumiose_scroll_menu_open()&&
+            atomic_load(&mouse_menu_modal_scene)!=ZA_MOVES_STATE){
+            if(e->type==SDL_EVENT_KEY_DOWN&&!e->key.repeat){
+                unsigned info=atomic_load(&mouse_tab_info),count=info>>8,current=info&255;
+                if(atomic_load(&mouse_tab_scene)==ZA_MOVES_STATE&&count&&count<=16&&current<count){
+                    bool right=e->key.scancode==g_bind_key[BIND_ZR];
+                    mouse_moves_cancel();direct_list_cancel();za_mouse_ui_cancel();mouse_tab_cancel();
+                    atomic_store(&mouse_tab_request,(int)((current+(right?1:count-1))%count)+1);
+                }
+            }
+            return;
+        }
         if (e->type == SDL_EVENT_KEY_DOWN && !e->key.repeat) {
             if(za_menu_state()==ZA_MOVES_STATE)mouse_moves_cancel();
             atomic_fetch_add(&bag_drag_generation, 1);
