@@ -1,4 +1,4 @@
-# Lumiose Online for ZA Recomp — v0.1.34 (Windows)
+# Lumiose Online for ZA Recomp — v0.1.35 (Windows)
 
 ## Install or update
 
@@ -11,6 +11,13 @@
 - Keep the preparation window open until any required compatibility preparation
   finishes. Saved customized bindings remain; Restore default controls in
   Settings > Controls adopts the documented layout.
+
+## Upgrade repair
+
+This update forces game-code preparation before the mod is refreshed, fixing
+upgrades where the new runtime could start the rebuilt vanilla game without
+the matching prepared mod. Keep the preparation window open until both steps
+finish. Existing saves, settings and installed mod versions are retained.
 
 ## Bundled mod and future updates
 
