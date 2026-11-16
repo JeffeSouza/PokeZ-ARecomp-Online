@@ -43,9 +43,10 @@ def sidecar(candidate, info, *, active=None):
 
 def _module(path):
     root = Path(__file__).resolve().parents[2]
-    tools = str(root / 'tools')
-    if tools not in sys.path:
-        sys.path.insert(0, tools)
+    for directory in (root / 'tools', root / 'python-deps'):
+        value = str(directory)
+        if value not in sys.path:
+            sys.path.insert(0, value)
     from nso import Nso
     return Nso(Path(path))
 

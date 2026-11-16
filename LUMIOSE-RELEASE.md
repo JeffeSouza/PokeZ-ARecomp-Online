@@ -1,4 +1,4 @@
-# Lumiose Online for ZA Recomp â€” v0.1.36 (Windows)
+# Lumiose Online for ZA Recomp â€” v0.1.37 (Windows)
 
 ## Install or update
 

@@ -12,7 +12,7 @@ from native_compat import FOOTER, MAGIC, MAX_JSON, load_profile, read_update_pro
 
 def _module(path):
     # Use the SAME NSO parser and compatibility validator as auto_prepare.
-    sys.path.insert(0, str(HERE.parent))
+    sys.path[:0] = [str(HERE.parent.parent / 'python-deps'), str(HERE.parent)]
     from nso import Nso
     return Nso(str(path))
 

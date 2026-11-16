@@ -17,7 +17,7 @@ import time
 from native_compat import SCHEMA, ABI_REVISION, canonical_build_id, normalize_candidate, validate_candidate, discover_candidate, runtime_profile_bytes
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'tools'))
+sys.path[:0] = [str(ROOT / 'python-deps'), str(ROOT / 'tools')]
 from nso import Nso
 
 # Only profiles derived and validated during THIS preparation are cached.
