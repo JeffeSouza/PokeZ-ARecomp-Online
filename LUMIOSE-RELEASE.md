@@ -1,4 +1,4 @@
-# Lumiose Online for ZA Recomp — v0.1.35 (Windows)
+# Lumiose Online for ZA Recomp â€” v0.1.36 (Windows)
 
 ## Install or update
 
@@ -26,12 +26,13 @@ This full Windows archive includes the currently installed normal mod,
 The bundled mod SHA-256 is:
 `ccf73f151ec203f39cb0f2e49828d046aa699d83273b3c7edb4e9a5f2a3b5786`.
 
-Future builds can carry validated compatibility metadata with the downloaded
-module. The launcher verifies and prepares each update, keeps its matching
-compatibility data with that version, and preserves the existing legacy path.
-Unsupported updates fail clearly; downgrades remain blocked. The original public
-server connection and normal PC controls remain unchanged. This launcher update
-does not bundle a private capture test runtime or enable relay features by itself.
+Server-delivered raw mod builds are inspected locally to derive their supported
+ABI, camera query locations and switch-table targets. Build IDs identify cached
+versions and do not require registration. Server-supplied compatibility metadata
+is optional. The original update transport, public server connection and normal
+PC controls remain unchanged. The launcher verifies preparation before activating
+a version and keeps startup output from the current attempt, including the
+runtime log. Earlier attempts cannot supply stale success markers.
 
 ## Native PC controls
 

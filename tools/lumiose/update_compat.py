@@ -110,9 +110,15 @@ def validate_prepared(work, result, candidate, expected_download_hash, info, pro
     if canonical.get('version') is not None and _version(canonical['version']) != version:
         raise RuntimeError('Compatibility version differs from the actual native version')
     runtime = work / 'native-profile.bin'
+    if canonical['schema'] == api.SCHEMA:
+        if (result.get('module_kind') != canonical['module_kind']
+                or result.get('native_abi') is not (canonical['module_kind'] == 'native')
+                or result.get('camera_query_count') != len(canonical['camera_query_returns'])
+                or result.get('runtime_profile_format') != 2):
+            raise RuntimeError('Prepared ABI flags/camera count differ from binary discovery')
     expected_runtime = api.runtime_profile_bytes(canonical)
-    if len(expected_runtime) != 44 or expected_runtime[:32].hex() != full_id or runtime.read_bytes() != expected_runtime:
-        raise RuntimeError('Prepared runtime profile is not the exact validated 44-byte record')
+    if canonical['build_id32'] != full_id or runtime.read_bytes() != expected_runtime:
+        raise RuntimeError('Prepared runtime profile is not the exact binary-validated record')
     return ProfileBinding(metadata, runtime, full_id, info['base_sha256'], expected_download_hash, version)
 
 
@@ -135,10 +141,10 @@ def bind_active(active, state, env):
     api = _api()
     canonical = api.validate_candidate(_module(module_path), module_path, api.load_profile(metadata))
     expected = api.runtime_profile_bytes(canonical)
-    if len(expected) != 44 or runtime.read_bytes() != expected:
+    if runtime.read_bytes() != expected:
         raise RuntimeError('The active runtime profile differs from validated compatibility metadata')
     with module_path.open('rb') as stream:
         header = stream.read(0x60)
-    if header[:4] != b'NSO0' or expected[:32] != header[0x40:0x60] or api.canonical_build_id(header[0x40:0x60]) != state.get('build_id'):
+    if header[:4] != b'NSO0' or canonical['build_id32'] != header[0x40:0x60].hex() or api.canonical_build_id(header[0x40:0x60]) != state.get('build_id'):
         raise RuntimeError('The active runtime profile belongs to a different module')
     env['LUMIOSE_NATIVE_PROFILE_PATH'] = str(runtime.resolve())

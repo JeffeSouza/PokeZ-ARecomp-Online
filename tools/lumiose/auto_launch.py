@@ -31,27 +31,6 @@ def write_state(path, state):
     os.replace(tmp, path)
 
 
-# Historical exact fallback; other same-version updates need validated metadata.
-_ACCEPTED_MULTIPLAYER_SHA = '3eb7fe5c6cf8e0419dd21105c23e49a206edbdb88c9cae54ef6a1b2cc0f8cff1'
-_ACCEPTED_MULTIPLAYER_ID32 = '0f595efed7e82686fd288ad61bec0c0f68f1a408000000000000000000000000'
-_ACCEPTED_MULTIPLAYER_VERSION = (1, 5, 8, 0)
-
-
-def approved_multiplayer_same_version(candidate, version, active_version, build_id, current_hash):
-    if (tuple(version) != _ACCEPTED_MULTIPLAYER_VERSION
-            or tuple(active_version) != _ACCEPTED_MULTIPLAYER_VERSION
-            or build_id != _ACCEPTED_MULTIPLAYER_ID32[:40]
-            or current_hash != _ACCEPTED_MULTIPLAYER_SHA):
-        return False
-    try:
-        data = Path(candidate).read_bytes()
-    except OSError:
-        return False
-    return (hashlib.sha256(data).hexdigest() == _ACCEPTED_MULTIPLAYER_SHA
-            and len(data) >= 0x100 and data[:4] == b'NSO0'
-            and data[0x40:0x60].hex() == _ACCEPTED_MULTIPLAYER_ID32)
-
-
 def prepared_mod_transition_allowed(version, state, *, refresh, downloaded,
                                     candidate, build_id, current_hash, compatibility=None):
     if tuple(version) > tuple(state.get('version', [])):
@@ -67,8 +46,7 @@ def prepared_mod_transition_allowed(version, state, *, refresh, downloaded,
             and compatibility.download_sha256 == current_hash
             and compatibility.build_id == build_id):
         return True
-    return bool(downloaded and approved_multiplayer_same_version(
-        candidate, version, state.get('version', []), build_id, current_hash))
+    return False
 
 
 def launch(config_path, prepare_only=False):

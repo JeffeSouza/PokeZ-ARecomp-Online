@@ -9,7 +9,7 @@ from datetime import datetime
 
 ROOT = Path(__file__).resolve().parents[2]
 GAME_CODE_REVISION = 'launcher-0135-codegen-v1'
-LAUNCHER_VERSION = 'v0.1.35'
+LAUNCHER_VERSION = 'v0.1.36'
 sys.path.insert(0, str(ROOT / 'tools' / 'lumiose'))
 from auto_launch import launch
 from platform_paths import EXECUTABLE, GAME_LIBRARY, lock_file
