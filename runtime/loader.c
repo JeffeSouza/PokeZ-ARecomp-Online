@@ -213,12 +213,13 @@ void loader_load(const char *exefs) {
             {0x96,0xf2,0xb1,0x42,0x85,0x3f,0xa1,0x51},  // 1.3.9 recomp build 1
         };
         uint8_t h[0x60];
-        uint8_t expected_id[20];
+        uint8_t expected_id[32] = {0};
         bool updater_allowed = false;
         const char *expected = getenv("LUMIOSE_PREPARE_BUILD_ID");
-        if (expected && strlen(expected) == sizeof expected_id * 2) {
+        size_t expected_length = expected ? strlen(expected) : 0;
+        if (expected_length == 40 || expected_length == 64) {
             updater_allowed = true;
-            for (unsigned i = 0; i < sizeof expected_id; i++) {
+            for (unsigned i = 0; i < expected_length / 2; i++) {
                 unsigned v;
                 if (!isxdigit((unsigned char)expected[i * 2]) || !isxdigit((unsigned char)expected[i * 2 + 1]) ||
                     sscanf(expected + i * 2, "%2x", &v) != 1) { updater_allowed = false; break; }

@@ -1,4 +1,4 @@
-# Lumiose Online for ZA Recomp — v0.1.33 (Windows)
+# Lumiose Online for ZA Recomp â€” v0.1.37 (Windows)
 
 ## Install or update
 
@@ -8,9 +8,31 @@
 - Existing installation: close the game and use **Update now**, or copy the
   complete archive over the existing installation, merging folders. Keep your
   saves, settings, locally generated game code and installed mod data.
-- Keep the preparation window open. This update refreshes game code and control
-  glyphs once. Saved customized bindings remain; Restore default controls in
-  Settings > Controls adopts the new layout.
+- Keep the preparation window open until any required compatibility preparation
+  finishes. Saved customized bindings remain; Restore default controls in
+  Settings > Controls adopts the documented layout.
+
+## Upgrade repair
+
+This update forces game-code preparation before the mod is refreshed, fixing
+upgrades where the new runtime could start the rebuilt vanilla game without
+the matching prepared mod. Keep the preparation window open until both steps
+finish. Existing saves, settings and installed mod versions are retained.
+
+## Bundled mod and future updates
+
+This full Windows archive includes the currently installed normal mod,
+**1.5.8 build 8**, and launcher support for future server-delivered mod updates.
+The bundled mod SHA-256 is:
+`ccf73f151ec203f39cb0f2e49828d046aa699d83273b3c7edb4e9a5f2a3b5786`.
+
+Server-delivered raw mod builds are inspected locally to derive their supported
+ABI, camera query locations and switch-table targets. Build IDs identify cached
+versions and do not require registration. Server-supplied compatibility metadata
+is optional. The original update transport, public server connection and normal
+PC controls remain unchanged. The launcher verifies preparation before activating
+a version and keeps startup output from the current attempt, including the
+runtime log. Earlier attempts cannot supply stale success markers.
 
 ## Native PC controls
 

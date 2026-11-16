@@ -208,7 +208,7 @@ uint64_t kernel_phys_largest(uint64_t *addr) {
     return best;
 }
 // Guest memory the runtime keeps for itself right after a physical memory region: the Vulkan backend's storage copies
-// (64 MB; exec.c gwin_pick: Pokémon Z-A has no heap for the ring to follow, and shaders reach a copy only inside the window
+// (64 MB; exec.c gwin_pick: PokÃ©mon Z-A has no heap for the ring to follow, and shaders reach a copy only inside the window
 // they address). Z-A's pool ends at 0x7740000000 and nothing of its own is ever mapped above it (2600 mappings over a
 // session on the Deck, 2026-11-01: all at 0x7400000000-0x7485000000); a physical mapping into the range is refused
 // all the same (LimitReached, which the game expects when memory runs out).
@@ -292,7 +292,7 @@ static void region_remove(uint64_t addr) {
 // ranges merge into one region (the SDK maps many small ones).
 // Application memory (GetInfo 6 / 21) and what the process uses of it (GetInfo 7 / 22): the heap, physical memory
 // (svcMapPhysicalMemory) and ~64 MB for the code, stacks and kernel objects. As on hardware, a physical mapping
-// beyond it fails with LimitReached - Pokémon Z-A maps all the free memory as one pool, then keeps asking for 4 MB
+// beyond it fails with LimitReached - PokÃ©mon Z-A maps all the free memory as one pool, then keeps asking for 4 MB
 // pieces until refused. Off by default (LARECOMP_PHYS_LIMIT=1): with the limit the game keeps fewer characters / props
 // loaded than on Ryujinx with its own (smaller) baseline - the 64 MB estimate is not what the hardware counts.
 #define APP_MEMORY 0xCD500000ull
@@ -995,8 +995,9 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
         pthread_mutex_lock(&g_mlock);
         query_memory(x[2], x[0]);
         if (g_nmodules > 2 && pc >= g_modules[2].base && pc < g_modules[2].base + g_modules[2].text_size &&
-            ((x[30] == g_modules[2].base + 0x15248 || x[30] == g_modules[2].base + 0x152f0) ||
-             lumiose_native_camera_query(x[30]))) {
+            (lumiose_native_camera_query(x[30]) ||
+             (!lumiose_native_profile_current() &&
+              (x[30] == g_modules[2].base + 0x15248 || x[30] == g_modules[2].base + 0x152f0)))) {
             lumiose_camera_memory(x[2], x[0]);
             if (ENV("LUMIOSE_LOG_CAMERA_MEMORY")) {
                 static int nlog;

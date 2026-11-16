@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 from platform_paths import WINDOWS, EXECUTABLE, GAME_LIBRARY, MODULE_LIBRARY, ZIG
+import update_compat
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -45,14 +46,23 @@ def main():
     work_root = mod / 'update-work'
     work_root.mkdir(exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='initial-', dir=work_root))
+    info = update_compat.read_candidate(candidate)
+    profile_path = update_compat.sidecar(candidate, info)
     cmd = [sys.executable, str(ROOT / 'tools/lumiose/auto_prepare.py'),
            '--candidate', str(candidate), '--reference', str(reference), '--game', str(game),
            '--vanilla', str(vanilla), '--exe', str(exe), '--zig', str(zig),
            '--cache', str(game / '.gamebuild'), '--work', str(work)]
+    if profile_path is not None:
+        cmd += ['--compatibility-profile', str(profile_path)]
     if subprocess.run(cmd, cwd=ROOT).returncode: raise RuntimeError(f'Preparation failed; see {work}')
     result = json.loads((work / 'prepared.json').read_text())
+    if sha(candidate) != info['download_sha256'] or sha(work / 'input/exefs/subsdk9') != info['base_sha256']:
+        raise RuntimeError('The initial downloaded/base module changed while being prepared')
+    compatibility = update_compat.validate_prepared(work, result, candidate, info['download_sha256'], info, profile_path)
     files = ((work / 'input/exefs/subsdk9', 'subsdk9'), (work / MODULE_LIBRARY, MODULE_LIBRARY),
              (work / GAME_LIBRARY, GAME_LIBRARY), (vanilla_id, GAME_LIBRARY + '.id'))
+    if compatibility is not None:
+        files += compatibility.files
     version_dir = result['build_id'] + '-' + sha(candidate)[:16]
     versions = mod / 'versions'
     versions.mkdir(exist_ok=True)

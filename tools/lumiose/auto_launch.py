@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 from platform_paths import WINDOWS, EXECUTABLE, GAME_LIBRARY, MODULE_LIBRARY, lock_file
+import update_compat
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -28,6 +29,24 @@ def write_state(path, state):
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
+
+
+def prepared_mod_transition_allowed(version, state, *, refresh, downloaded,
+                                    candidate, build_id, current_hash, compatibility=None):
+    if tuple(version) > tuple(state.get('version', [])):
+        return True
+    identical_refresh = (refresh and tuple(version) == tuple(state.get('version', []))
+                         and build_id == state.get('build_id')
+                         and current_hash == state.get('active_hashes', {}).get('subsdk9'))
+    if identical_refresh:
+        return True
+    if (downloaded and isinstance(compatibility, update_compat.ProfileBinding)
+            and tuple(version) == tuple(state.get('version', []))
+            and compatibility.version == tuple(version)
+            and compatibility.download_sha256 == current_hash
+            and compatibility.build_id == build_id):
+        return True
+    return False
 
 
 def launch(config_path, prepare_only=False):
@@ -82,28 +101,35 @@ def launch(config_path, prepare_only=False):
         work_root = mod_dir / 'update-work'
         work_root.mkdir(parents=True, exist_ok=True)
         work = Path(tempfile.mkdtemp(prefix='prepare-', dir=work_root))
+        info = update_compat.read_candidate(candidate)
+        if info['download_sha256'] != current_hash:
+            raise RuntimeError('The download changed before compatibility preparation')
+        profile_path = update_compat.sidecar(candidate, info, active=active_dir if refresh else None)
         cmd = [sys.executable, str(ROOT / 'tools' / 'lumiose' / 'auto_prepare.py'),
                '--candidate', str(candidate), '--reference', cfg['reference'],
                '--game', str(game), '--vanilla', cfg['vanilla'], '--exe', str(install / EXECUTABLE),
                '--zig', cfg['zig'], '--cache', cfg['cache'], '--work', str(work)]
+        if profile_path is not None:
+            cmd += ['--compatibility-profile', str(profile_path)]
         if subprocess.run(cmd, cwd=ROOT).returncode:
             raise RuntimeError(f'The update could not be prepared. Details are in {work}')
         if digest(candidate) != current_hash:
             raise RuntimeError('The download changed while being prepared; please start the launcher again')
-        if digest(work / 'input' / 'exefs' / 'subsdk9') != current_hash:
+        if digest(work / 'input' / 'exefs' / 'subsdk9') != info['base_sha256']:
             raise RuntimeError('The downloaded file changed while it was being copied')
         result = json.loads((work / 'prepared.json').read_text())
+        compatibility = update_compat.validate_prepared(work, result, candidate, current_hash, info, profile_path)
         build_id = result['build_id']
-        if len(build_id) != 40 or any(c not in '0123456789abcdef' for c in build_id):
+        if len(build_id) not in (40, 64) or any(c not in '0123456789abcdef' for c in build_id):
             raise RuntimeError('The prepared update has an invalid build ID')
         version = result.get('version')
         if (not isinstance(version, list) or len(version) != 4 or
                 any(not isinstance(x, int) or x < 0 for x in version)):
             raise RuntimeError('The prepared update has an invalid version')
-        if tuple(version) <= tuple(state.get('version', [])):
-            if not (refresh and tuple(version) == tuple(state.get('version', [])) and
-                    build_id == state.get('build_id') and current_hash == state.get('active_hashes', {}).get('subsdk9')):
-                raise RuntimeError('The downloaded mod is not newer than the active version')
+        # auto_prepare and staged/candidate hashes were verified above.
+        if not prepared_mod_transition_allowed(version, state, refresh=refresh, downloaded=downloaded,
+                                               candidate=candidate, build_id=build_id, current_hash=current_hash, compatibility=compatibility):
+            raise RuntimeError('The downloaded mod is not newer than the active version')
         versions = mod_dir / 'versions'
         versions.mkdir(exist_ok=True)
         suffix = ('-volatile2' if linux_refresh else '-switch1') if refresh and not game_rebuild else ''
@@ -114,6 +140,8 @@ def launch(config_path, prepare_only=False):
         files = ((work / 'input' / 'exefs' / 'subsdk9', 'subsdk9'),
                  (work / MODULE_LIBRARY, MODULE_LIBRARY), (work / GAME_LIBRARY, GAME_LIBRARY),
                  (id_file, GAME_LIBRARY + '.id'))
+        if compatibility is not None:
+            files += compatibility.files
         if target.exists():
             if any(digest(src) != digest(target / dst) for src, dst in files):
                 raise RuntimeError('A different prepared version already exists; update was not activated')
@@ -164,6 +192,7 @@ def launch(config_path, prepare_only=False):
     env.pop('LUMIOSE_UI_MODEL_ROOT', None)
     env.pop('LUMIOSE_UI_TEST_MODEL_ROOT', None)
     env.pop('LUMIOSE_UI_TEST_MODEL_FRAME', None)
+    update_compat.bind_active(active, state, env)
     if not prepare_only:
         try:
             from game_ui_font import prepare as prepare_game_ui_font

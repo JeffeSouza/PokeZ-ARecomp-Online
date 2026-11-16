@@ -14,150 +14,58 @@ import struct
 import subprocess
 import sys
 import time
+from native_compat import SCHEMA, ABI_REVISION, canonical_build_id, normalize_candidate, validate_candidate, discover_candidate, runtime_profile_bytes
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'tools'))
+sys.path[:0] = [str(ROOT / 'python-deps'), str(ROOT / 'tools')]
 from nso import Nso
 
-TABLES_139 = [(0x57fdc8, 91, 'h', 0x136c44), (0x194b40, 123, 'h', 0x364cc),
-              (0x212290, 14, 'b', 0xc1d74)]
+# Only profiles derived and validated during THIS preparation are cached.
+# Build IDs and hashes bind those bytes; they never select compatibility policy.
+SUPPLIED_COMPATIBILITY = {}
+DISCOVERED_COMPATIBILITY = {}
+CURRENT_COMPATIBILITY = {}
 
 
-def unique(data, signature, description):
-    pos = data.find(signature)
-    if pos < 0 or data.find(signature, pos + 1) >= 0:
-        raise RuntimeError(f'{description} changed or is ambiguous; this update needs compatibility work')
-    return pos
+def module_profile(module, path, reference=None):
+    data = Path(path).read_bytes()
+    if len(data) < 0x100 or data[:4] != b'NSO0':
+        raise RuntimeError('Invalid compatibility module')
+    module.build_id = canonical_build_id(data[0x40:0x60])
+    key = (data[0x40:0x60].hex(), hashlib.sha256(data).hexdigest())
+    if key not in DISCOVERED_COMPATIBILITY:
+        actual = discover_candidate(module, path, reference=reference)
+        supplied = SUPPLIED_COMPATIBILITY.get(key[0])
+        if supplied is not None:
+            accepted = validate_candidate(module, path, supplied)
+            actual['additional_function_entries'] = sorted(set(actual['additional_function_entries']) |
+                                                          set(accepted['additional_function_entries']))
+            if 'version' in accepted:
+                actual['version'] = accepted['version']
+        DISCOVERED_COMPATIBILITY[key] = actual
+    value = DISCOVERED_COMPATIBILITY[key]
+    CURRENT_COMPATIBILITY[module.build_id] = value
+    return value
 
 
-# A native-ABI profile is admitted only after binary, import relocations, call
-# sites, camera map queries and name-preservation semantics have been reviewed.
-# Unknown modules retain the strict legacy compatibility checks below.
-NATIVE_PROFILES = {'84684491199a6b9180725802558b75d9c0a0d0c4': {'camera_query_returns': [86704, 86816, 87040],
-                                              'name_preservation_verified': True,
-                                              'sha256': '90498556f83eb0f467bad29f1acc805ece178820842e7c63128ea8ecbae34781',
-                                              'witnesses': [(86688,
-                                                             'e20316aae10313aae00314aa5532059420020035e0bf40f9e00100b4e18741b9'),
-                                                            (86784,
-                                                             'e20315aae1030391e02303911c0080d21b0080d299b9e7f21600805239320594200700351f2003d5fa6b40f9da0600b4e0e340b9e26740f9000400125703028b'),
-                                                            (87020, 'f50317aae1030391e20315aae02303910132059440f9ff34'),
-                                                            (87816,
-                                                             'df3e0071e8010054403c009100ec7c92e10317aa75a30594e30300aa200100b43afdff97e103002a60400091e1000036'),
-                                                            (1448960, 'e10f1ff8c10000d4e20741f8410000b9c0035fd6'),
-                                                            (1565936, '301700f011be44f910e2259120021fd6'),
-                                                            (1566928, '301700f011b645f910a22d9120021fd6'),
-                                                            (256640,
-                                                             '602100b401004039020080d201210034e10000341f2003d5420400915f5c00f1800800540168623881ffff3502200034e303022aff4309d1e10300aa402600f000a02491fd7b00a9fd030091e18b01a9e31700f9ebbc0494e31740f9e18b41a9e01f0035402600f0044013918400038b84605139e41d003404401391853442f9'),
-                                                            (256800,
-                                                             '422600f08000038b23008052436012391f601139202100f0000c47f9400000b464ff0494402600f0'),
-                                                            (257712,
-                                                             '412600f022008052202100f0000c47f92260123900e7ffb4fd7b40a9ff43099180fe0414'),
-                                                            (258460,
-                                                             'a15a42f982625139012001ca811200f9620c0034402600d001a0249162421391e5909252e554bc72'),
-                                                            (259056,
-                                                             '25908d52230a00d063e02e91e4909252e454bc7225000079412600d0430000f9040000b920a064398000003420a02491400000f9c0035fd6200a00d000c02d91400000f9c0035fd6'),
-                                                            (1596272, '5265636f6d7000')]},
- 'd2e94b5e81e6da075256b515952e75ed2103e32a': {'camera_query_returns': [86704, 86816, 87040],
-                                              'name_preservation_verified': True,
-                                              'sha256': '2d041c2a270bc5cf47947eecf1c4138907e6992c6b1847310586e2e7943ac2cd',
-                                              'witnesses': [(86688,
-                                                             'e20316aae10313aae00314aa3d32059420020035e0bf40f9e00100b4e18741b9'),
-                                                            (86784,
-                                                             'e20315aae1030391e02303911c0080d21b0080d299b9e7f21600805221320594200700351f2003d5fa6b40f9da0600b4e0e340b9e26740f9000400125703028b'),
-                                                            (87020, 'f50317aae1030391e20315aae0230391e931059440f9ff34'),
-                                                            (87816,
-                                                             'df3e0071e8010054403c009100ec7c92e10317aa55a30594e30300aa200100b43afdff97e103002a60400091e1000036'),
-                                                            (1448864, 'e10f1ff8c10000d4e20741f8410000b9c0035fd6'),
-                                                            (1565808, '301700f011be44f910e2259120021fd6'),
-                                                            (1566800, '301700f011b645f910a22d9120021fd6'),
-                                                            (256640,
-                                                             '602100b401004039020080d201210034e10000341f2003d5420400915f5c00f1800800540168623881ffff3502200034e303022aff4309d1e10300aa402600f000a02491fd7b00a9fd030091e18b01a9e31700f9cbbc0494e31740f9e18b41a9e01f0035402600f0044013918400038b84605139e41d003404401391853442f9'),
-                                                            (256800,
-                                                             '422600f08000038b23008052436012391f601139202100f0000c47f9400000b444ff0494402600f0'),
-                                                            (257712,
-                                                             '412600f022008052202100f0000c47f92260123900e7ffb4fd7b40a9ff43099160fe0414'),
-                                                            (258460,
-                                                             'a15a42f982625139012001ca811200f9620c0034402600d001a0249162421391e5909252e554bc72'),
-                                                            (259056,
-                                                             '25908d52230a00d063e02e91e4909252e454bc7225000079412600d0430000f9040000b920a064398000003420a02491400000f9c0035fd6200a00d000c02d91400000f9c0035fd6'),
-                                                            (1596272, '5265636f6d7000')]},
- 'fed1e64fbb8479baa78e4f57afda7f468c7d4ad2': {'camera_query_returns': [86704, 86816, 87040],
-                                              'name_preservation_verified': True,
-                                              'sha256': '6094f9629785dfed5ffca5782565ddfdaf424c642804793cf1dac62af95c7a6a',
-                                              'witnesses': [(86688,
-                                                             'e20316aae10313aae00314aa5532059420020035e0bf40f9e00100b4e18741b9'),
-                                                            (86784,
-                                                             'e20315aae1030391e02303911c0080d21b0080d299b9e7f21600805239320594200700351f2003d5fa6b40f9da0600b4e0e340b9e26740f9000400125703028b'),
-                                                            (87020, 'f50317aae1030391e20315aae02303910132059440f9ff34'),
-                                                            (87816,
-                                                             'df3e0071e8010054403c009100ec7c92e10317aa75a30594e30300aa200100b43afdff97e103002a60400091e1000036'),
-                                                            (1448960, 'e10f1ff8c10000d4e20741f8410000b9c0035fd6'),
-                                                            (1565936, '301700f011be44f910e2259120021fd6'),
-                                                            (1566928, '301700f011b645f910a22d9120021fd6'),
-                                                            (256640,
-                                                             '602100b401004039020080d201210034e10000341f2003d5420400915f5c00f1800800540168623881ffff3502200034e303022aff4309d1e10300aa402600f000a02491fd7b00a9fd030091e18b01a9e31700f9ebbc0494e31740f9e18b41a9e01f0035402600f0044013918400038b84605139e41d003404401391853442f9'),
-                                                            (256800,
-                                                             '422600f08000038b23008052436012391f601139202100f0000c47f9400000b464ff0494402600f0'),
-                                                            (257712,
-                                                             '412600f022008052202100f0000c47f92260123900e7ffb4fd7b40a9ff43099180fe0414'),
-                                                            (258460,
-                                                             'a15a42f982625139012001ca811200f9620c0034402600d001a0249162421391e5909252e554bc72'),
-                                                            (259056,
-                                                             '25908d52230a00d063e02e91e4909252e454bc7225000079412600d0430000f9040000b920a064398000003420a02491400000f9c0035fd6200a00d000c02d91400000f9c0035fd6'),
-                                                            (1596272, '5265636f6d7000')]}}
+def profile_for_build(build_id):
+    return CURRENT_COMPATIBILITY.get(build_id)
 
 
-def native_profile(module, path):
-    profile = NATIVE_PROFILES.get(module.build_id)
-    if profile is None:
-        return None
-    if hashlib.sha256(Path(path).read_bytes()).hexdigest() != profile['sha256']:
-        raise RuntimeError('Native compatibility module hash mismatch')
-    for name in ('vmp_recomp_camera_find', 'vmp_recomp_name_ready'):
-        indices = [i for i, sym in enumerate(module.syms) if sym[0] == name and sym[2] == 0]
-        if len(indices) != 1:
-            raise RuntimeError('Native compatibility import missing or ambiguous: ' + name)
-        relocs = [r for r in module.relocs if r[2] == indices[0] and r[1] in (257, 1025, 1026)]
-        if not relocs or any(r[3] != 0 or r[0] < module.rodata[0] or r[0]+8 > len(module.image) for r in relocs):
-            raise RuntimeError('Native compatibility import relocation invalid: ' + name)
-    for offset, expected in profile['witnesses']:
-        signature = bytes.fromhex(expected)
-        if bytes(module.image[offset:offset+len(signature)]) != signature:
-            raise RuntimeError('Native compatibility call or name semantics changed')
-    if not profile.get('name_preservation_verified'):
-        raise RuntimeError('Native compatibility trainer-name preservation not verified')
-    return profile
+def startup_has_crash(contents):
+    for line in contents.splitlines():
+        notice = line.strip()
+        if notice == '[crash] no crash report folder on card' or notice == '[guest] [crash] no crash report folder on card':
+            continue
+        if any(marker in line for marker in ('[crash]', '*** exception', 'no function at ', 'FATAL', '[fatal]')):
+            return True
+    return False
 
 
 def tables_for(reference, candidate):
-    old, new = Nso(str(reference)), Nso(str(candidate))
-    if not old.build_id.startswith('96f2b142853fa151'):
-        raise RuntimeError('The 1.3.9 compatibility reference is missing or incorrect')
-    data = bytes(new.image)
-    native = native_profile(new, candidate)
-    for off in (() if native else (0x15248, 0x152f0)):
-        # The BL destination can move; the return address and surrounding
-        # camera-query instructions must retain the same meaning.
-        if (bytes(old.image[off - 12:off - 4]) != bytes(new.image[off - 12:off - 4]) or
-                bytes(old.image[off:off + 12]) != bytes(new.image[off:off + 12])):
-            raise RuntimeError('Camera integration changed; this update needs compatibility work')
-        def branch_target(module):
-            word = struct.unpack_from('<I', module.image, off - 4)[0]
-            if word >> 26 != 0b100101: raise RuntimeError('Camera query call changed')
-            value = word & 0x3ffffff
-            return off - 4 + (value - (1 << 26) if value & (1 << 25) else value) * 4
-        a, b = branch_target(old), branch_target(new)
-        if min(a, b) < 0 or a + 16 > old.text[1] or b + 16 > new.text[1] or \
-                bytes(old.image[a:a + 16]) != bytes(new.image[b:b + 16]):
-            raise RuntimeError('Camera query implementation changed')
-    found = []
-    for off, count, fmt, base in TABLES_139:
-        table = bytes(old.image[off:off + count * struct.calcsize(fmt)])
-        target = bytes(old.image[base:base + 32])
-        noff = unique(data, table, 'Jump table')
-        nbase = unique(data[:new.text[1]], target, 'Jump table destination')
-        found.append((noff, count, fmt, nbase))
-    return new, found
+    new = Nso(str(candidate))
+    profile = module_profile(new, candidate, reference=reference)
+    return new, profile['switch_tables']
 
 
 def run(command, env, log):
@@ -188,7 +96,7 @@ def run(command, env, log):
 
 def smoke_version(contents, expected_platform=2):
     """Validate a live title or HUD without requiring the player to enter the overworld."""
-    if '[crash]' in contents or '*** exception' in contents or 'no function at ' in contents:
+    if startup_has_crash(contents):
         raise RuntimeError('The isolated startup reported a crash')
     if '[violetmp][gate] hooks installed: 0 address misses' not in contents:
         return None
@@ -213,8 +121,14 @@ def capture(exe, game, work, module, library, gamelib, build_id, *, snapshot, se
                LUMIOSE_TEST_MODULE=str(module), LUMIOSE_TEST_LIBRARY=str(library),
                LARECOMP_GAME_LIB=str(gamelib), LUMIOSE_TEST_OFFLINE_CAPTURE='1',
                LUMIOSE_PREPARE_BUILD_ID=build_id)
+    runtime_profile = work / 'native-profile.bin'
+    if runtime_profile.is_file():
+        env['LUMIOSE_NATIVE_PROFILE_PATH'] = str(runtime_profile)
+    else:
+        env.pop('LUMIOSE_NATIVE_PROFILE_PATH', None)
     for key in ('LARECOMP_INPUT', 'LUMIOSE_TEST_NETWORK', 'LUMIOSE_TEST_DROP_FILE', 'LARECOMP_REBOOT_AT',
-                'LARECOMP_LAUNCHER_SETUP', 'LARECOMP_LAUNCHER_EXTRACT', 'LARECOMP_LAUNCHER_SHOT', 'LUMIOSE_FIRST_SETUP'):
+                'LARECOMP_LAUNCHER_SETUP', 'LARECOMP_LAUNCHER_EXTRACT', 'LARECOMP_LAUNCHER_SHOT', 'LUMIOSE_FIRST_SETUP',
+                'LASRECOMP_LOG_FILE', 'LASRECOMP_INFO_LOGGED'):
         env.pop(key, None)
     if snapshot:
         env['LUMIOSE_TEST_DUMP'] = str(work)
@@ -222,23 +136,36 @@ def capture(exe, game, work, module, library, gamelib, build_id, *, snapshot, se
         env.pop('LUMIOSE_TEST_DUMP', None)
     env['PATH'] = str(exe.parent) + os.pathsep + env.get('PATH', '')
     log = work / ('capture.log' if snapshot else 'smoke.log')
+    runtime_log = work / 'logs' / 'play.log'
     for attempt in range(2):
         retry = False
+        # The runtime can redirect stderr after rt_paths_init() to its owned
+        # data-root log. Never accept markers left by the snapshot or a retry.
+        if runtime_log.exists():
+            os.replace(runtime_log, work / (log.stem + f'-attempt-{attempt + 1}-previous-play.log'))
+        def contents_now():
+            parts = []
+            for path in (log, runtime_log):
+                try: parts.append(path.read_text(errors='replace'))
+                except FileNotFoundError: pass
+            return '\n'.join(parts)
         with log.open('w', encoding='utf-8') as f:
             p = subprocess.Popen([str(exe), str(game), '--play'], cwd=str(exe.parent), env=env,
                                  stdout=f, stderr=subprocess.STDOUT,
                                  creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            def failure(reason):
+                return RuntimeError(f'{reason} (attempt {attempt + 1}/2, exit code {p.poll()}; logs: {log}, {runtime_log})')
             try:
                 start = time.monotonic()
                 while time.monotonic() - start < secs:
-                    contents = log.read_text(errors='replace')
-                    if '[crash]' in contents or '*** exception' in contents or 'no function at ' in contents:
-                        raise RuntimeError(f'Isolated startup reported a crash (see {log})')
+                    contents = contents_now()
+                    if startup_has_crash(contents):
+                        raise failure('Isolated startup reported a crash')
                     if p.poll() is not None:
                         if attempt == 0 and not contents:
                             retry = True
                             break
-                        raise RuntimeError(f'Isolated startup exited unexpectedly (see {log})')
+                        raise failure('Isolated startup exited unexpectedly')
                     if not contents and attempt == 0 and time.monotonic() - start >= min(20, secs / 2):
                         retry = True
                         break
@@ -246,26 +173,28 @@ def capture(exe, game, work, module, library, gamelib, build_id, *, snapshot, se
                         if snapshot and '[lumiose test] wrote local module snapshots' in contents:
                             return
                         if not snapshot:
-                            version = smoke_version(contents, expected_platform=3 if build_id in NATIVE_PROFILES else 2)
+                            version = smoke_version(contents, expected_platform=3 if (profile_for_build(build_id) or {}).get('module_kind') == 'native' else 2)
                             if version is not None:
                                 return version
                     time.sleep(1)
                 if not retry:
-                    raise RuntimeError(f'Isolated startup did not finish (see {log})')
+                    raise failure('Isolated startup did not finish')
             finally:
                 if p.poll() is None:
                     p.terminate()
                     try: p.wait(timeout=8)
                     except subprocess.TimeoutExpired:
                         p.kill(); p.wait()
+                if startup_has_crash(contents_now()):
+                    raise failure('Isolated startup reported a crash')
         print('The isolated startup produced no output; trying once more...', flush=True)
 
 
 def patch_generated(work, build_id):
-    if build_id in NATIVE_PROFILES:
+    if (profile_for_build(build_id) or {}).get('module_kind') == 'native':
         source = Path(work) / 'input' / 'exefs' / 'subsdk9'
         module = Nso(str(source))
-        if module.build_id != build_id or native_profile(module, source) is None:
+        if module_profile(module, source)['build_id'] != build_id or module_profile(module, source)['module_kind'] != 'native':
             raise RuntimeError('Native compatibility profile does not match generated input')
         # This exact module preserves trainer names itself and calls the bound
         # native scanner/readiness ABI. Applying legacy translated-body edits
@@ -321,8 +250,18 @@ def patch_generated(work, build_id):
     os.environ['LUMIOSE_SCRATCH'] = str(work)
     try:
         exec(compile(patch, 'preserve_name_139.py', 'exec'), {})
-        exec(compile((ROOT / 'tools' / 'lumiose' / 'optimize_camera_139.py').read_text(),
-                     'optimize_camera_139.py', 'exec'), {})
+        # This optional acceleration has an exact old generated-body template.
+        # A moved/reallocated scanner retains its original guest instructions;
+        # dynamic query-return discovery supplies correctness independently.
+        scanner_needle = ('L_7006215368:;\n'
+            '    { uint64_t ea = xr_20 + 0x0ull; uint64_t v = LD64(ea); c->x[0] = (uint64_t)(v); }')
+        scanner_matches = [body for _, _, body, _ in functions if scanner_needle in body]
+        if (len(scanner_matches) == 1 and scanner_matches[0].count(scanner_needle) == 1
+                and 'L_70062153f4:;' in scanner_matches[0]):
+            exec(compile((ROOT / 'tools' / 'lumiose' / 'optimize_camera_139.py').read_text(),
+                         'optimize_camera_139.py', 'exec'), {})
+        else:
+            print('Legacy camera scanner retained unchanged; optional old fast-path template does not match', flush=True)
     finally:
         if previous is None: os.environ.pop('LUMIOSE_SCRATCH', None)
         else: os.environ['LUMIOSE_SCRATCH'] = previous
@@ -333,17 +272,21 @@ def main():
     p = argparse.ArgumentParser()
     for arg in ('candidate', 'reference', 'game', 'vanilla', 'exe', 'zig', 'cache', 'work'):
         p.add_argument('--' + arg, type=Path, required=True)
+    p.add_argument('--compatibility-profile', type=Path)
     a = p.parse_args()
     for name in ('candidate', 'reference', 'game', 'vanilla', 'exe', 'zig', 'cache', 'work'):
         setattr(a, name, getattr(a, name).resolve())
     a.work.mkdir(parents=True, exist_ok=True)
     if any(a.work.iterdir()): raise RuntimeError('Work folder must be empty')
-    candidate, tables = tables_for(a.reference, a.candidate)
-    if len(candidate.build_id) != 40: raise RuntimeError('Invalid module build ID')
-    print('Preparing Lumiose build', candidate.build_id, flush=True)
     staged = a.work / 'input' / 'exefs'
-    staged.mkdir(parents=True)
-    shutil.copy2(a.candidate, staged / 'subsdk9')
+    update = normalize_candidate(a.candidate, staged / 'subsdk9', a.compatibility_profile)
+    a.candidate = Path(update['path'])
+    if update['selected_profile'] is not None:
+        supplied = update['selected_profile']
+        SUPPLIED_COMPATIBILITY[supplied['build_id32']] = supplied
+    candidate, tables = tables_for(a.reference, a.candidate)
+    if len(candidate.build_id) not in (40, 64): raise RuntimeError('Invalid module build ID')
+    print('Preparing Lumiose build', candidate.build_id, flush=True)
     shutil.copy2(a.game / 'exefs' / 'main', staged / 'main')
     env = os.environ.copy()
     env.update(PYTHONPATH=str(ROOT / 'python-deps') + os.pathsep + os.environ.get('PYTHONPATH', ''), LUMIOSE_SCRATCH=str(a.work),
@@ -352,9 +295,23 @@ def main():
                LUMIOSE_GAME_CACHE=str(a.cache), LUMIOSE_UPDATE_TABLES=json.dumps(tables),
                LUMIOSE_GAME_ID_FILE=str(a.vanilla) + '.id')
     entries = set()
+    profile = module_profile(candidate, a.candidate, reference=a.reference)
+    entries.update(profile['additional_function_entries'])
     for off, count, fmt, base in tables:
         entries.update(base + v * 4 for v in struct.unpack_from(f'<{count}{fmt}', candidate.image, off))
-    env['LUMIOSE_TEST_ENTRIES_LUMIOSE'] = ','.join(hex(x) for x in entries)
+    env['LUMIOSE_TEST_ENTRIES_LUMIOSE'] = ','.join(hex(x) for x in sorted(entries))
+    profile_outputs = dict(native_sha256=update['base_sha256'], download_sha256=update['download_sha256'])
+    if profile is not None:
+        accepted = dict(profile)
+        accepted.setdefault('switch_tables', tables)
+        accepted.setdefault('additional_function_entries', sorted(entries))
+        (a.work / 'compatibility.json').write_text(json.dumps(accepted, sort_keys=True) + '\n', encoding='utf-8')
+        (a.work / 'native-profile.bin').write_bytes(runtime_profile_bytes(accepted))
+        env['LUMIOSE_NATIVE_PROFILE_PATH'] = str(a.work / 'native-profile.bin')
+        profile_outputs.update(build_id32=accepted['build_id32'], compatibility_abi_revision=ABI_REVISION,
+            compatibility_profile='compatibility.json', runtime_profile='native-profile.bin',
+            module_kind=accepted['module_kind'], native_abi=accepted['module_kind'] == 'native',
+            camera_query_count=len(accepted['camera_query_returns']), runtime_profile_format=2)
     bootstrap = a.work / 'generated' / 'bootstrap'
     bootstrap.mkdir(parents=True)
     py = sys.executable
@@ -394,7 +351,7 @@ def main():
         save_cache(cache_root, a.work)
     except Exception as e:
         print('Could not save the optional speed-up cache:', e, flush=True)
-    (a.work / 'prepared.json').write_text(json.dumps({'build_id': candidate.build_id, 'version': version}) + '\n')
+    (a.work / 'prepared.json').write_text(json.dumps({'build_id': candidate.build_id, 'version': version, **profile_outputs}) + '\n')
     print('Update prepared and startup verified.', flush=True)
 
 

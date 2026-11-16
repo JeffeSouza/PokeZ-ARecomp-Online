@@ -12,6 +12,27 @@ DLLS = ('amd_fidelityfx_loader_vk.dll', 'amd_fidelityfx_upscaler_vk.dll', 'avcod
         'libshaderc_shared.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll', 'SDL3.dll', 'swscale-10.dll')
 
 
+# Exact owned-mod choices only. The reference remains TABLES139-compatible.
+APPROVED_BUNDLED_MODS = {
+    'lumiose/subsdk9': {
+        'e304bf4fa710be688f5a50dc9b6210b8dbdb4671e7b9ea5313c63ed3e17f69e2':
+            '96f2b142853fa1515ebce682e770e1241f9081fb000000000000000000000000',
+    },
+    'tools/lumiose/prepackaged.subsdk9': {
+        'e7aaea520e8074763c047e9bab7a0de2ae79ed4953fcc7a91c0f36469411e5f9':
+            'ea3373963a6032742895e9d15128388a67df2ac1000000000000000000000000',
+        'ccf73f151ec203f39cb0f2e49828d046aa699d83273b3c7edb4e9a5f2a3b5786':
+            '0124d3f6a48e67fefaa3ab4145bf24c26c42c3ff000000000000000000000000',
+    },
+}
+
+
+def approved_bundled_mod(relative, data):
+    expected = APPROVED_BUNDLED_MODS.get(relative, {}).get(hashlib.sha256(data).hexdigest())
+    return (expected is not None and len(data) >= 0x100 and data[:4] == b'NSO0'
+            and data[0x40:0x60].hex() == expected)
+
+
 def copy_file(src, dest):
     if not src.is_file(): raise RuntimeError(f'Required support file missing: {src}')
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -45,6 +66,7 @@ def main():
     copy_file(ROOT / 'README.md', out / 'ZA-Recomp-README.md')
     copy_file(ROOT / 'LICENSE', out / 'ZA-Recomp-LICENSE.txt')
     copy_file(ROOT / 'docs/PC-CONTROLS.md', out / 'docs/PC-CONTROLS.md')
+    copy_file(ROOT / 'CLAUDE_MOD_UPDATES.md', out / 'docs/CLAUDE_MOD_UPDATES.md')
     for n in ('DejaVuSans.ttf', 'DejaVuSans-Bold.ttf'):
         copy_file(ROOT / 'third_party/fonts/DejaVu' / n, out / n)
     copy_file(ROOT / 'third_party/fonts/DejaVu/LICENSE', out / 'DejaVu-LICENSE.txt')
@@ -67,13 +89,12 @@ def main():
         copy_file(ROOT / 'tools' / n, out / 'tools' / n)
     copy_file(ROOT / 'tools/rando/patch_variants.json', out / 'tools/rando/patch_variants.json')
     shutil.copytree(ROOT / 'tools/lumiose', out / 'tools/lumiose', ignore=shutil.ignore_patterns('__pycache__', '*.subsdk9', 'prepackaged.subsdk9'))
-    # Exact mod/reference shipped in v0.1.27; never accept arbitrary NSOs.
-    approved_mods = {'lumiose/subsdk9': 'e304bf4fa710be688f5a50dc9b6210b8dbdb4671e7b9ea5313c63ed3e17f69e2',
-                     'tools/lumiose/prepackaged.subsdk9': 'e7aaea520e8074763c047e9bab7a0de2ae79ed4953fcc7a91c0f36469411e5f9'}
-    for name, digest in approved_mods.items():
+    # Preserve the exact legacy reference and allow only reviewed initial modules.
+    approved_mods = APPROVED_BUNDLED_MODS
+    for name in approved_mods:
         src = ROOT / name
-        if hashlib.sha256(src.read_bytes()).hexdigest() != digest:
-            raise RuntimeError(f'Unexpected bundled mod bytes: {name}')
+        if not approved_bundled_mod(name, src.read_bytes()):
+            raise RuntimeError(f'Unexpected bundled mod bytes or build ID: {name}')
         copy_file(src, out / name)
     for n in ('lumiose/model-renderer', 'THIRD-PARTY-NOTICES'):
         src = a.support / n
@@ -94,7 +115,7 @@ def main():
         with f.open('rb') as stream: magic = stream.read(4)
         if magic == b'NSO0' and f.relative_to(out).as_posix() not in approved_mods:
             raise RuntimeError(f'Unexpected NSO module: {f}')
-    print(f'Packaged {sum(1 for f in out.rglob("*") if f.is_file())} files; only exact v0.1.27 mod/reference NSOs are included; no game modules.')
+    print(f'Packaged {sum(1 for f in out.rglob("*") if f.is_file())} files; only exact approved reference/initial mod NSOs are included; no game modules.')
 
 
 if __name__ == '__main__':
