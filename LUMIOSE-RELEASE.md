@@ -6,11 +6,11 @@ A game lookup can return no entry just after the title screen. The launcher now 
 
 ## Install or update
 
-- New installation: first install the complete v0.1.37 **ZA Recomp** folder into a writable
-  location, apply the v0.1.38 update, and open **Lumiose Online.exe**. Supply your own Pokemon Legends:
+- New installation: extract the complete **ZA Recomp** folder into a writable
+  location and open **Lumiose Online.exe**. Supply your own Pokemon Legends:
   Z-A game files, update 2.0.2 and DLC. Normal bundled mod setup is included.
 - Existing installation: close the game and use **Update now**, or copy the
-  update archive over the existing installation, merging folders. Keep your
+  complete archive over the existing installation, merging folders. Keep your
   saves, settings, locally generated game code and installed mod data.
 - Keep the preparation window open until any required compatibility preparation
   finishes. Saved customized bindings remain; Restore default controls in
@@ -25,7 +25,7 @@ finish. Existing saves, settings and installed mod versions are retained.
 
 ## Bundled mod and future updates
 
-The v0.1.37 full Windows archive includes the normal mod,
+This full Windows archive includes the normal mod,
 **1.5.8 build 8**, and launcher support for future server-delivered mod updates.
 The bundled mod SHA-256 is:
 `ccf73f151ec203f39cb0f2e49828d046aa699d83273b3c7edb4e9a5f2a3b5786`.
