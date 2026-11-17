@@ -704,19 +704,14 @@ void rt_za_list_select(Cpu *c) {
         atomic_load(&za_list_guard_epoch) != atomic_load(&mouse_list_scene_epoch) ||
         atomic_load(&za_list_guard_scene) != za_menu_state()) return;
     // A held direction (keys, stick, pad) is the player moving the selection: let it through and drop the guard, which
-    // only keeps the selection still while a wheel scroll animates (it pulled Change Moves back to the pinned entry).
+    // only keeps the selection still while a wheel scroll animates (arrows / W S on Change Moves went back to the pinned entry).
     if (za_list_nav_input()) {
         atomic_store(&za_list_guard, false);
-        if (getenv("LARECOMP_MOUSE_UI_LOG")) fprintf(stderr, "[list-guard] released by navigation f=%llu\n", (unsigned long long)renderer_present_count());
         return;
     }
     int cols = atomic_load(&za_list_guard_cols), top = (int)(uint32_t)c->x[2];
-    if (cols > 0 && cols <= 20 && top >= 0 && top <= 10000) {
-        if (getenv("LARECOMP_MOUSE_UI_LOG") && c->x[1] != (uint32_t)(atomic_load(&za_list_guard_selected) - top * cols))
-            fprintf(stderr, "[list-guard] selection %u -> %d (top %d) f=%llu\n", (unsigned)c->x[1],
-                    atomic_load(&za_list_guard_selected) - top * cols, top, (unsigned long long)renderer_present_count());
+    if (cols > 0 && cols <= 20 && top >= 0 && top <= 10000)
         c->x[1] = (uint32_t)(atomic_load(&za_list_guard_selected) - top * cols);
-    }
 }
 
 static void za_list_tick_locked(Cpu *c) {
@@ -965,9 +960,6 @@ static void za_list_tick_locked(Cpu *c) {
         // Recognize an off-screen selection left by a previous scroll.
         if ((row < 0 || row >= (int)(cols * rows)) && absolute >= 0 && absolute < count) {
             s->selected = (int)absolute; s->target = (int)top; s->pinned = true;
-            if (getenv("LARECOMP_MOUSE_UI_LOG"))
-                fprintf(stderr, "[list-pin] scene=%llx row=%d top=%u count=%u f=%llu\n", (unsigned long long)scene, row, top, count,
-                        (unsigned long long)frame);
         } else return;
     }
     if (za_list_nav_input() || atomic_load(&mouse_menu_running)) s->recover = true;
@@ -977,12 +969,7 @@ static void za_list_tick_locked(Cpu *c) {
     if (!LD32(sc + 0x178)) { s->animating = false; atomic_store(&za_list_guard, false); }
     if (s->recover && !s->animating) {
         top = LD32(sel + 16); int row = (int32_t)LD32(sel + 20);
-        if (getenv("LARECOMP_MOUSE_UI_LOG"))
-            fprintf(stderr, "[list-recover] scene=%llx row=%d top=%u selected=%d f=%llu\n", (unsigned long long)scene, row, top,
-                    s->selected, (unsigned long long)frame);
-        // (not Change Moves: its page controller owns the selection, and this pulled every arrow press back to the first
-        // move - the list's own row reads out of range there)
-        if ((row < 0 || row >= (int)(cols * rows)) && scene != ZA_MOVES_STATE) {
+        if (row < 0 || row >= (int)(cols * rows)) {
             unsigned visible = row < 0 ? 0 : cols * rows - 1;
             if (top * cols + visible >= count) visible = count - 1 - top * cols;
             Cpu saved = *c; c->x[0] = o; c->x[1] = visible; c->x[2] = top;
