@@ -1,4 +1,8 @@
-# Lumiose Online for ZA Recomp â€” v0.1.37 (Windows)
+# Lumiose Online for ZA Recomp â€” v0.1.38 (Windows)
+
+## Title screen crash fix
+
+A game lookup can return no entry just after the title screen. The launcher now handles that case and prepares updated game code on the first start after upgrading.
 
 ## Install or update
 
@@ -21,7 +25,7 @@ finish. Existing saves, settings and installed mod versions are retained.
 
 ## Bundled mod and future updates
 
-This full Windows archive includes the currently installed normal mod,
+This full Windows archive includes the normal mod,
 **1.5.8 build 8**, and launcher support for future server-delivered mod updates.
 The bundled mod SHA-256 is:
 `ccf73f151ec203f39cb0f2e49828d046aa699d83273b3c7edb4e9a5f2a3b5786`.

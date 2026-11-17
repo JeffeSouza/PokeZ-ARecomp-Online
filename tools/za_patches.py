@@ -3,6 +3,16 @@ that one builds Link's Awakening's tables from its address table on import (tool
 Z-A version."""
 import struct
 
+# A missing map entry during title startup has no offset for this frame. Keep
+# the remaining generated instructions so their reference releases still run.
+TITLE_UPDATE_OFFSET = {'b1f12fd919eae86a': 0x70012e5f0c}
+
+def _za_title_update_offset(gen, a):
+    w = struct.unpack_from('<I', gen.nso.image, a - gen.base)[0]
+    if w != 0x3dc01001:  # ldr q1, [x0, #0x40]
+        raise ValueError(f'title update {a:#x}: unexpected instruction {w:#010x}')
+    return 'c->v[1] = c->x[0] ? LD128(c->x[0] + 0x40ull) : 0;'
+
 # Frame mode: the game's frame clock (f_70019e3730) reads its configured "vsyncs per frame - 1" byte (1 on the
 # Switch: 30 fps) from [[x19, #0x40], #0x20]; it sets the present interval from it and hands every subsystem
 # max(that, the vsyncs that really passed) as the frame's step. Through rt_za_frame_cfg the 60 fps option makes it 0:
@@ -163,6 +173,8 @@ def za_sdk_patches(main_build, sdk_build):
 
 def za_patches(build):
     out = {ZA_BUILDS[build]: _za_frame_cfg}
+    if build in TITLE_UPDATE_OFFSET:
+        out[TITLE_UPDATE_OFFSET[build]] = _za_title_update_offset
     if build in FRAME_DT:
         out[FRAME_DT[build]] = _za_frame_dt
     if build in FRAME_STEP:
